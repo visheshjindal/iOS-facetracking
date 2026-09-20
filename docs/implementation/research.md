@@ -1,0 +1,15 @@
+# Research register
+
+Updated 2026-09-21 by plan 00. Every gate is `OPEN`; setup, compilation, simulator smoke tests, and synthetic fixtures do not substitute for the required evidence.
+
+| ID | Owner role | Required evidence to close | Blocking acceptance | Status / current evidence |
+| --- | --- | --- | --- | --- |
+| R01 | Vision/camera implementation engineer | Selected Vision request and revision; minimum/current SDK matrix; real yaw/pitch/roll availability, neutral bias, sign convention, and nil/failure behavior. | M3 live pose and M5 acquisition sign-off. | OPEN — no camera or Vision work in M0. |
+| R02 | Geometry/camera implementation engineer plus physical-device reviewer | Asymmetric labeled-corner and left/right-luma fixtures; mathematical orientation/crop/mirror tests; physical front-camera center/edge, clean-aperture, stabilization-crop, and mirror checks across portrait aspect ratios. | M3 overlay and M4 regional-lighting sign-off. | OPEN — no transforms or camera in M0. |
+| R03 | Product/device reviewer with implementation engineer | Real observations of multiple people entering, crossing, and leaving; documented primary-face switching; explicit approval and tests for any selector change. | Multi-person acceptance in M6. | OPEN — baseline first-usable rule retained; no detection in M0. |
+| R04 | Calibration owner with representative participants/devices | Controlled development and held-out sessions across supported devices and varied appearance, lighting, and face sizes; false/missed-warning and usefulness results; exposure/mask confounders; approved versioned thresholds. | Lighting release acceptance. | OPEN — `ios-provisional-v1` records uncalibrated constants only. |
+| R05 | Performance/camera implementation engineer | Relationship between presentation and monotonic clocks; capture-to-analysis-to-display p50/p95 latency under stress; drop reasons; tested conversion/discontinuity/restart behavior if timebases must be bridged. | M6 freshness sign-off. | OPEN — timestamps/watchdog implementation is not part of M0. |
+| R06 | Performance engineer | Instruments evidence on oldest supported device: detection/sampling/delivery/display-age distributions, memory, energy, thermal behavior after warm-up and stress, plus documented tradeoffs. | M6 performance sign-off. | OPEN — no physical profiling performed. |
+| R07 | Product/release reviewer | Approved minimum OS and iPhone list; two-second hold; multi-face expectations; permission/Exit navigation; English/translations; lighting acceptance limits; privacy/distribution declarations; oldest/newer device availability. | Release and D02 acceptance. | OPEN — M0 provisionally uses iOS 17, iPhone portrait, English, bundle `xim.facetracking`, and automatic signing; reviewer confirmation is pending. |
+
+Evidence records must name requirement/test ID, build, device and OS, profile, scenario, observed result, pass/fail, and unresolved issue. Do not attach participant frames, face crops, landmarks, or identifying face data.
