@@ -5,7 +5,7 @@ Planning files created on 2026-09-21. No application implementation or verificat
 | Plan | Code | Automated verification | Human acceptance | Handoff |
 | --- | --- | --- | --- | --- |
 | 00 Project foundation | Complete | Passed | Pending D02/R07 and human shell/device smoke | [00](handoffs/00.md) |
-| 01 Models and positioning | Not started | Not run | Not applicable to pure code | Not created |
+| 01 Models and positioning | Complete | Passed (P01–P09; 10 total unit tests) | Not applicable to pure code; R01/R02/R03 remain open | [01](handoffs/01.md) |
 | 02 Session state | Not started | Not run | Not applicable to pure code | Not created |
 | 03 Camera and preview | Not started | Not run | Pending | Not created |
 | 04 Coordinate mapping | Not started | Not run | Pending R02 | Not created |
@@ -23,4 +23,4 @@ All R01–R07 remain OPEN. Plan 00 created the detailed [research register](rese
 
 ## Next action
 
-Plan 01 is implementation-ready: plan 00 provides a compiling `ios-provisional-v1` configuration, shared scheme, and passing XCTest/UI smoke plumbing. Open a new chat with [plan 01](../../plans/01-models-positioning.md), following [the usage instructions](../../plans/README.md). Keep D02/R07 and R01–R07 open unless their required evidence is supplied.
+Plan 02 is implementation-ready: plan 01 provides validated observation models, preview target geometry, explicit positioning history/result types, and passing P01–P09 coverage. Open a new chat with [plan 02](../../plans/02-session-state.md), following [the usage instructions](../../plans/README.md). Keep D02/R07 and R01–R07 open unless their required evidence is supplied.
