@@ -120,6 +120,27 @@ final class CameraPreviewLifecycleTests: XCTestCase {
         XCTAssertEqual(camera.tearDownCount, 1)
     }
 
+    func testMailboxConsumptionAt300KeepsFaceAnd301WithdrawsPayload() {
+        for (capturedAt, expectsFace) in [(700, true), (699, false)] {
+            let camera = CameraDouble()
+            let store = makeStore(authorization: AuthorizationDouble(.authorized), camera: camera)
+            store.routeAppeared(isSceneActive: true)
+            store.viewportChanged(width: 390, height: 700)
+            camera.emitObservation(FrameObservation(
+                sessionID: 1,
+                geometryRevision: 1,
+                capturedAtMS: Int64(capturedAt),
+                resultAtMS: 1_000,
+                face: FaceSample(
+                    geometry: FaceGeometry(centerX: 0.5, centerY: 0.5, width: 0.3, height: 0.3),
+                    pose: nil
+                ),
+                lighting: nil
+            ))
+            XCTAssertEqual(store.viewState.rawFace != nil, expectsFace)
+        }
+    }
+
     private func makeStore(
         authorization: AuthorizationDouble,
         camera: CameraDouble,
@@ -131,6 +152,7 @@ final class CameraPreviewLifecycleTests: XCTestCase {
                 authorization: authorization,
                 camera: camera,
                 clock: FixedClock(),
+                scheduler: InertScheduler(),
                 settingsOpener: settings
             ),
             dismiss: dismiss
@@ -140,6 +162,16 @@ final class CameraPreviewLifecycleTests: XCTestCase {
 
 private struct FixedClock: MonotonicClock {
     func nowMilliseconds() -> Int64 { 1_000 }
+}
+
+private final class InertCancellation: ScheduledCancellation, @unchecked Sendable {
+    func cancel() {}
+}
+
+private struct InertScheduler: MonotonicScheduling {
+    func schedule(afterMilliseconds: Int64, action: @escaping @Sendable () -> Void) -> ScheduledCancellation {
+        InertCancellation()
+    }
 }
 
 private final class AuthorizationDouble: CameraAuthorizing, @unchecked Sendable {
@@ -182,11 +214,18 @@ private final class CameraDouble: CameraSessionControlling, @unchecked Sendable 
     var tearDownCount = 0
     private var activeIDs: Set<UInt64> = []
     private var eventHandler: (@Sendable (CameraServiceEvent) -> Void)?
+    private var observationHandler: (@Sendable (FrameObservation) -> Void)?
 
     init(autoComplete: Bool = true) { self.autoComplete = autoComplete }
 
-    func start(sessionID: UInt64, eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void) {
+    func start(
+        context: FrameAnalysisContext,
+        eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void,
+        observationHandler: @escaping @Sendable (FrameObservation) -> Void
+    ) {
         self.eventHandler = eventHandler
+        self.observationHandler = observationHandler
+        let sessionID = context.sessionID
         commands.append(.start(sessionID))
         activeIDs.insert(sessionID)
         maximumActiveCount = max(maximumActiveCount, activeIDs.count)
@@ -204,9 +243,11 @@ private final class CameraDouble: CameraSessionControlling, @unchecked Sendable 
         tearDownCount += 1
         activeIDs.removeAll()
         eventHandler = nil
+        observationHandler = nil
     }
 
     func emit(_ event: CameraServiceEvent) { eventHandler?(event) }
+    func emitObservation(_ observation: FrameObservation) { observationHandler?(observation) }
 }
 
 private extension CameraSelection {

@@ -91,7 +91,7 @@ enum SessionTransition {
             state.stage = result.stage
             state.rawFace = result.rawFace
             state.lastAcceptedSampleMS = observation.capturedAtMS
-            state.lastSuccessfulAnalysisMS = observation.capturedAtMS
+            state.lastSuccessfulAnalysisMS = observation.resultAtMS
             // Lighting classification is intentionally deferred to plan 07.
             state.lightingHistory = .empty
             effects.append(.scheduleFreshness(

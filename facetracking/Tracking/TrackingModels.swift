@@ -52,6 +52,25 @@ struct FrameObservation: Sendable, Equatable {
     let sessionID: UInt64
     let geometryRevision: UInt64
     let capturedAtMS: Int64
+    /// Monotonic time when Vision completed successfully. Capture time drives
+    /// face freshness; result time drives analysis-stall monitoring.
+    let resultAtMS: Int64
     let face: FaceSample?
     let lighting: FaceLightingMetrics?
+
+    init(
+        sessionID: UInt64,
+        geometryRevision: UInt64,
+        capturedAtMS: Int64,
+        resultAtMS: Int64? = nil,
+        face: FaceSample?,
+        lighting: FaceLightingMetrics?
+    ) {
+        self.sessionID = sessionID
+        self.geometryRevision = geometryRevision
+        self.capturedAtMS = capturedAtMS
+        self.resultAtMS = resultAtMS ?? capturedAtMS
+        self.face = face
+        self.lighting = lighting
+    }
 }

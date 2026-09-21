@@ -12,6 +12,10 @@
 - Store tests run on `MainActor`, inject authorization/camera/clock/Settings/dismissal, and clear callback retention before asserting weak deallocation.
 - G01/G02 fixtures must label all four raw corners, use non-square rectangles, unequal viewport aspects, explicit clean-aperture offsets, raw pixel centers, and unequal left/right luma. Expected coordinates are hand-calculated in comments rather than produced by mapper helpers.
 - Pair Vision lower-left rectangles with raw top-left sample points only through the same immutable `FrameTransformSnapshot`; never disguise raw samples as Vision-normalized inputs. Include one-mirror and completely-outside rejection assertions.
+- Detector doubles return ordered candidate arrays or throw synchronously. Cover incomplete pose, radians-to-degrees conversion, invalid-before-usable selection, nil-face success, stale completion, and generation invalidation.
+- Mailbox fixtures manually drain scheduled closures and assert one scheduled drain plus one pending newest observation. Timer fixtures advance injected monotonic milliseconds through 300/301 and 5,000/5,250 boundaries.
+- Luma byte fixtures use explicit width/height/stride, padding sentinels, tiny dimensions, range labels, and hand-computed values. Assert the 4,096 cap and never derive expected statistics through production helpers.
+- Histogram fixtures name every bucket/count and cover even/odd ranks, partial-bucket trimming, inclusive 24/235 cutoffs, 95/96 totals, 31/32 regions, partition errors, NaN, ellipse edges, and right/bottom equality.
 - Build lifecycle fixtures through reducer events; direct state mutation is reserved for otherwise unreachable overflow boundaries and seeding history that a test explicitly names.
 - Focused command: `xcodebuild -project facetracking.xcodeproj -scheme facetracking -destination 'platform=iOS Simulator,id=<DISCOVERED_UDID>' -only-testing:facetrackingTests test` with temporary DerivedData and result-bundle paths.
 - `AGENTS.md` is excluded from synchronized-group target membership and test bundles.

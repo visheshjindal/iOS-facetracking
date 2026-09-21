@@ -32,19 +32,13 @@ final class CameraPreviewSession: @unchecked Sendable {
 
 protocol CameraSessionControlling: AnyObject {
     var previewSession: CameraPreviewSession { get }
-    func start(sessionID: UInt64, eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void)
+    func start(
+        context: FrameAnalysisContext,
+        eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void,
+        observationHandler: @escaping @Sendable (FrameObservation) -> Void
+    )
     func stop(sessionID: UInt64, eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void)
     func tearDown()
-}
-
-private final class VideoOutputSink: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
-    func captureOutput(
-        _ output: AVCaptureOutput,
-        didOutput sampleBuffer: CMSampleBuffer,
-        from connection: AVCaptureConnection
-    ) {
-        // Plan 05 installs serial analysis. Plan 03 intentionally releases frames immediately.
-    }
 }
 
 final class CameraSessionService: CameraSessionControlling, @unchecked Sendable {
@@ -52,20 +46,34 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
 
     private let cameraQueue = DispatchQueue(label: "xim.facetracking.camera.session")
     private let outputQueue = DispatchQueue(label: "xim.facetracking.camera.output")
-    private let outputSink = VideoOutputSink()
+    private let analyzer: FrameAnalyzer
     private var configured = false
     private var selection: CameraSelection?
     private var activeSessionID: UInt64?
     private var notificationTokens: [NSObjectProtocol] = []
     private var eventHandler: (@Sendable (CameraServiceEvent) -> Void)?
 
-    init(session: AVCaptureSession = AVCaptureSession()) {
+    init(
+        session: AVCaptureSession = AVCaptureSession(),
+        detector: FaceDetecting = VisionFaceDetector(),
+        clock: any MonotonicClock = SystemMonotonicClock()
+    ) {
         previewSession = CameraPreviewSession(session: session)
+        let mailbox = ObservationMailbox { action in DispatchQueue.main.async(execute: action) }
+        analyzer = FrameAnalyzer(detector: detector, clock: clock, mailbox: mailbox)
     }
 
-    func start(sessionID: UInt64, eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void) {
+    func start(
+        context: FrameAnalysisContext,
+        eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void,
+        observationHandler: @escaping @Sendable (FrameObservation) -> Void
+    ) {
         cameraQueue.async { [weak self] in
-            self?.startOnCameraQueue(sessionID: sessionID, eventHandler: eventHandler)
+            self?.startOnCameraQueue(
+                context: context,
+                eventHandler: eventHandler,
+                observationHandler: observationHandler
+            )
         }
     }
 
@@ -80,23 +88,46 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
             guard let self else { return }
             activeSessionID = nil
             eventHandler = nil
+            analyzer.invalidate()
             if previewSession.session.isRunning { previewSession.session.stopRunning() }
             removeObservers()
         }
     }
 
     private func startOnCameraQueue(
-        sessionID: UInt64,
-        eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void
+        context: FrameAnalysisContext,
+        eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void,
+        observationHandler: @escaping @Sendable (FrameObservation) -> Void
     ) {
         dispatchPrecondition(condition: .onQueue(cameraQueue))
         self.eventHandler = eventHandler
+        let sessionID = context.sessionID
         do {
             if !configured { try configureSession() }
+            guard let selection else { throw SessionFailureError(.cameraUnavailable) }
+            let activeContext = FrameAnalysisContext(
+                sessionID: sessionID,
+                geometryRevision: context.geometryRevision,
+                viewportPoints: context.viewportPoints,
+                previewMirrored: selection.previewMirrored,
+                outputRotationDegrees: selection.rotationDegrees
+            )
+            analyzer.activate(
+                context: activeContext,
+                observationHandler: observationHandler,
+                failureHandler: { [weak self] id, failure in
+                    self?.cameraQueue.async { [weak self] in
+                        guard let self, activeSessionID == id else { return }
+                        activeSessionID = nil
+                        analyzer.invalidate(sessionID: id)
+                        self.eventHandler?(.failed(sessionID: id, failure: failure))
+                    }
+                }
+            )
             activeSessionID = sessionID
             installObserversIfNeeded()
             if !previewSession.session.isRunning { previewSession.session.startRunning() }
-            guard activeSessionID == sessionID, let selection else { return }
+            guard activeSessionID == sessionID else { return }
             eventHandler(.started(sessionID: sessionID, selection: selection))
         } catch let failure as SessionFailureError {
             activeSessionID = nil
@@ -112,7 +143,10 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
         eventHandler: @escaping @Sendable (CameraServiceEvent) -> Void
     ) {
         dispatchPrecondition(condition: .onQueue(cameraQueue))
-        if activeSessionID == sessionID { activeSessionID = nil }
+        if activeSessionID == sessionID {
+            activeSessionID = nil
+            analyzer.invalidate(sessionID: sessionID)
+        }
         if previewSession.session.isRunning { previewSession.session.stopRunning() }
         eventHandler(.stopped(sessionID: sessionID))
     }
@@ -141,10 +175,16 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
 
             let output = AVCaptureVideoDataOutput()
             output.alwaysDiscardsLateVideoFrames = true
-            output.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-            ]
-            output.setSampleBufferDelegate(outputSink, queue: outputQueue)
+            let supportedFormats = output.availableVideoPixelFormatTypes
+            let selectedFormat = supportedFormats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+                ? kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+                : supportedFormats.contains(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
+                    ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+                    : nil
+            if let selectedFormat {
+                output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: selectedFormat]
+            }
+            output.setSampleBufferDelegate(analyzer, queue: outputQueue)
             guard session.canAddOutput(output) else { throw SessionFailureError(.cameraUnavailable) }
             session.addOutput(output)
             addedOutput = output
@@ -233,6 +273,7 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
         cameraQueue.async { [weak self] in
             guard let self, let id = activeSessionID else { return }
             activeSessionID = nil
+            analyzer.invalidate(sessionID: id)
             eventHandler?(.failed(sessionID: id, failure: .cameraUnavailable))
         }
     }

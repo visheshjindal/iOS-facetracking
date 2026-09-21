@@ -186,11 +186,17 @@ final class SessionTransitionTests: XCTestCase {
         XCTAssertFalse(failed.state.desiredRunning)
 
         var keptAlive = state
-        apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: 5_000, face: nil)), to: &keptAlive)
-        XCTAssertEqual(keptAlive.lastSuccessfulAnalysisMS, 5_000)
-        XCTAssertUnchanged(.watchdogFired(sessionID: 1, atMS: 10_000), state: keptAlive)
+        apply(.observation(observation(
+            sessionID: 1,
+            revision: 1,
+            timestampMS: 5_000,
+            resultAtMS: 5_300,
+            face: nil
+        )), to: &keptAlive)
+        XCTAssertEqual(keptAlive.lastSuccessfulAnalysisMS, 5_300)
+        XCTAssertUnchanged(.watchdogFired(sessionID: 1, atMS: 10_300), state: keptAlive)
         XCTAssertEqual(
-            SessionTransition.reduce(state: keptAlive, event: .watchdogFired(sessionID: 1, atMS: 10_001)).state.failure,
+            SessionTransition.reduce(state: keptAlive, event: .watchdogFired(sessionID: 1, atMS: 10_301)).state.failure,
             .detectorUnavailable
         )
     }
@@ -260,6 +266,7 @@ final class SessionTransitionTests: XCTestCase {
         sessionID: UInt64,
         revision: UInt64,
         timestampMS: Int64,
+        resultAtMS: Int64? = nil,
         face: FaceSample? = FaceSample(
             geometry: FaceGeometry(centerX: 0.5, centerY: 0.5, width: 0.5, height: 0.32),
             pose: FacePose(yawDegrees: 0, pitchDegrees: 0, rollDegrees: 0)
@@ -269,6 +276,7 @@ final class SessionTransitionTests: XCTestCase {
             sessionID: sessionID,
             geometryRevision: revision,
             capturedAtMS: timestampMS,
+            resultAtMS: resultAtMS,
             face: face,
             lighting: nil
         )

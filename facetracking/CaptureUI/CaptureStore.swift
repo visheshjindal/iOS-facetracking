@@ -10,13 +10,16 @@ final class CaptureStore {
     @ObservationIgnored private let dismiss: () -> Void
     @ObservationIgnored private var authorizationRequestInFlight = false
     @ObservationIgnored private var latestSelection: CameraSelection?
+    @ObservationIgnored private let watchdog: AnalysisWatchdog
 
     var previewSession: CameraPreviewSession { dependencies.camera.previewSession }
 
     init(dependencies: CaptureDependencies, dismiss: @escaping () -> Void) {
         self.dependencies = dependencies
         self.dismiss = dismiss
+        watchdog = AnalysisWatchdog(clock: dependencies.clock, scheduler: dependencies.scheduler)
         viewState = CaptureViewState(session: session, selection: nil)
+        watchdog.onEvent = { [weak self] event in self?.send(event) }
     }
 
     func routeAppeared(isSceneActive: Bool) {
@@ -82,16 +85,55 @@ final class CaptureStore {
     private func dispatch(_ effect: SessionEffect) {
         switch effect {
         case let .requestCameraStart(sessionID):
-            dependencies.camera.start(sessionID: sessionID, eventHandler: cameraEventHandler)
+            guard let viewport = session.viewport else { return }
+            dependencies.camera.start(
+                context: FrameAnalysisContext(
+                    sessionID: sessionID,
+                    geometryRevision: session.geometryRevision,
+                    viewportPoints: CoordinateSize(width: viewport.widthPoints, height: viewport.heightPoints),
+                    previewMirrored: true,
+                    outputRotationDegrees: 0
+                ),
+                eventHandler: cameraEventHandler,
+                observationHandler: observationHandler
+            )
         case let .requestCameraStop(sessionID):
             dependencies.camera.stop(sessionID: sessionID, eventHandler: cameraEventHandler)
         case .dismissCapture:
             dismiss()
-        case .scheduleWatchdog, .cancelWatchdog, .scheduleFreshness, .cancelFreshness:
-            // Plan 05 owns result delivery and timers. Starting a watchdog before
-            // frames can produce observations would create a false detector failure.
-            break
+        case let .scheduleWatchdog(sessionID, _):
+            watchdog.start(sessionID: sessionID)
+        case let .cancelWatchdog(sessionID):
+            watchdog.cancel(sessionID: sessionID)
+        case let .scheduleFreshness(sessionID, expectedSampleMS):
+            watchdog.scheduleFreshness(sessionID: sessionID, expectedSampleMS: expectedSampleMS)
+        case let .cancelFreshness(sessionID):
+            watchdog.cancelFreshness(sessionID: sessionID)
         }
+    }
+
+    private var observationHandler: @Sendable (FrameObservation) -> Void {
+        { [weak self] observation in
+            MainActor.assumeIsolated { self?.receive(observation) }
+        }
+    }
+
+    private func receive(_ observation: FrameObservation) {
+        guard session.desiredRunning,
+              observation.sessionID == session.activeSessionID,
+              observation.geometryRevision == session.geometryRevision
+        else { return }
+        let delivered = now - observation.capturedAtMS > TrackingConfiguration.provisional.timing.faceFreshnessMS
+            ? FrameObservation(
+                sessionID: observation.sessionID,
+                geometryRevision: observation.geometryRevision,
+                capturedAtMS: observation.capturedAtMS,
+                resultAtMS: observation.resultAtMS,
+                face: nil,
+                lighting: nil
+            )
+            : observation
+        send(.observation(delivered))
     }
 
     private var cameraEventHandler: @Sendable (CameraServiceEvent) -> Void {

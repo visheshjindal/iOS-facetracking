@@ -6,6 +6,7 @@ struct CaptureViewState: Equatable {
     let isInterrupted: Bool
     let cameraStatus: CameraStatus
     let selection: CameraSelection?
+    let rawFace: FaceSample?
 
     var showsPreview: Bool {
         authorization == .authorized && failure == nil
@@ -17,5 +18,6 @@ struct CaptureViewState: Equatable {
         isInterrupted = session.isInterrupted
         cameraStatus = session.cameraStatus
         self.selection = selection
+        rawFace = session.rawFace
     }
 }

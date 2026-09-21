@@ -28,6 +28,7 @@ struct CaptureDependencies {
     let authorization: CameraAuthorizing
     let camera: CameraSessionControlling
     let clock: any MonotonicClock
+    let scheduler: any MonotonicScheduling
     let settingsOpener: SettingsOpening
 
     @MainActor
@@ -36,6 +37,7 @@ struct CaptureDependencies {
             authorization: SystemCameraAuthorization(),
             camera: CameraSessionService(),
             clock: SystemMonotonicClock(),
+            scheduler: SystemMonotonicScheduler(),
             settingsOpener: SystemSettingsOpener()
         )
     }
