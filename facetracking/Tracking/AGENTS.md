@@ -9,6 +9,7 @@
 - `SessionState.swift` is the lifecycle authority and owns generation, revision, attempt, raw-face, positioning, future-lighting, and typed-failure state. `SessionTransition.reduce(state:event:)` is the only session transition entry point and returns ordered `SessionEffect` values.
 - Invalidate `activeSessionID` before requesting camera teardown. Replacements record stop before start; stale session/revision events and non-increasing observation timestamps must return the entire state and effect list unchanged before touching any history.
 - Viewport bounds changes below 0.5 point are ignored relative to the last accepted viewport. Accumulated changes eventually cross that threshold, and every transform-revision change is meaningful.
+- `SessionViewport` describes the stable preview container in points; frame-specific raw/oriented/crop/mirror details belong to Camera's immutable transform snapshot. Face geometry entering Tracking is already normalized to the mirrored top-left viewport and may remain partly outside it when intersecting.
 - Session and geometry increments are checked. Identifier exhaustion and geometry-revision exhaustion are explicit non-retryable failures; never wrap an old identity back into use.
 - Focused tests: `xcodebuild ... -only-testing:facetrackingTests/PositioningRulesTests -only-testing:facetrackingTests/SessionTransitionTests test` using the simulator and temporary paths recorded in `docs/implementation/toolchain.md`.
 - Keep this file excluded from synchronized-group target membership and the app bundle.

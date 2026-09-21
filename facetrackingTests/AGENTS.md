@@ -10,6 +10,8 @@
 - Session fixtures record the complete ordered effect stream. Race permutations must assert that obsolete start/stop/error/observation events leave both state and effects unchanged, not merely that the final active ID looks correct.
 - Camera lifecycle doubles record every start/stop command with its session ID, can withhold and reorder callbacks, and track simultaneous active generations. Authorization doubles retain the pending completion so repeated Grant actions can be tested before resolution.
 - Store tests run on `MainActor`, inject authorization/camera/clock/Settings/dismissal, and clear callback retention before asserting weak deallocation.
+- G01/G02 fixtures must label all four raw corners, use non-square rectangles, unequal viewport aspects, explicit clean-aperture offsets, raw pixel centers, and unequal left/right luma. Expected coordinates are hand-calculated in comments rather than produced by mapper helpers.
+- Pair Vision lower-left rectangles with raw top-left sample points only through the same immutable `FrameTransformSnapshot`; never disguise raw samples as Vision-normalized inputs. Include one-mirror and completely-outside rejection assertions.
 - Build lifecycle fixtures through reducer events; direct state mutation is reserved for otherwise unreachable overflow boundaries and seeding history that a test explicitly names.
 - Focused command: `xcodebuild -project facetracking.xcodeproj -scheme facetracking -destination 'platform=iOS Simulator,id=<DISCOVERED_UDID>' -only-testing:facetrackingTests test` with temporary DerivedData and result-bundle paths.
 - `AGENTS.md` is excluded from synchronized-group target membership and test bundles.
