@@ -55,9 +55,17 @@ enum SessionFailure: Sendable, Equatable {
 enum LightingAssessment: Sendable, Equatable {
     case unknown
     case acceptable
-    case dark
-    case bright
+    case tooDark
+    case tooBright
     case uneven
+    case highContrast
+
+    var isWarning: Bool {
+        switch self {
+        case .tooDark, .tooBright, .uneven, .highContrast: true
+        case .unknown, .acceptable: false
+        }
+    }
 }
 
 enum LightingSide: Sendable, Equatable {
@@ -94,6 +102,7 @@ struct SessionState: Sendable, Equatable {
     var isInterrupted = false
 
     var stage: TrackingStage = .aligning
+    var positioningHint: PositioningHint = .placeFace
     var rawFace: FaceSample?
     var lastAcceptedSampleMS: Int64?
     var positioningHistory: PositioningHistory = .empty

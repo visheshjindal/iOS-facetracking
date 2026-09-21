@@ -89,11 +89,17 @@ enum SessionTransition {
             )
             state.positioningHistory = result.history
             state.stage = result.stage
+            state.positioningHint = result.hint
             state.rawFace = result.rawFace
             state.lastAcceptedSampleMS = observation.capturedAtMS
             state.lastSuccessfulAnalysisMS = observation.resultAtMS
-            // Lighting classification is intentionally deferred to plan 07.
-            state.lightingHistory = .empty
+            state.lightingHistory = LightingRules.update(
+                history: state.lightingHistory,
+                metrics: observation.lighting,
+                isEligible: result.isLightingEligible,
+                timestampMS: observation.capturedAtMS,
+                configuration: configuration
+            ).history
             effects.append(.scheduleFreshness(
                 sessionID: observation.sessionID,
                 expectedSampleMS: observation.capturedAtMS
@@ -106,6 +112,7 @@ enum SessionTransition {
                   elapsed(from: expectedSampleMS, to: nowMS, exceeds: configuration.timing.faceFreshnessMS)
             else { break }
             state.rawFace = nil
+            state.positioningHint = state.stage == .following ? .trackingLost : .placeFace
             state.positioningHistory = .empty
             state.lightingHistory = .empty
             effects.append(.cancelFreshness(sessionID: sessionID))
@@ -270,6 +277,7 @@ enum SessionTransition {
         preservingStage: Bool = false
     ) {
         if !preservingStage { state.stage = .aligning }
+        state.positioningHint = preservingStage && state.stage == .following ? .trackingLost : .placeFace
         state.rawFace = nil
         state.lastAcceptedSampleMS = nil
         state.positioningHistory = .empty

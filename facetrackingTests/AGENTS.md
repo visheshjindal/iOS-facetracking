@@ -16,6 +16,8 @@
 - Mailbox fixtures manually drain scheduled closures and assert one scheduled drain plus one pending newest observation. Timer fixtures advance injected monotonic milliseconds through 300/301 and 5,000/5,250 boundaries.
 - Luma byte fixtures use explicit width/height/stride, padding sentinels, tiny dimensions, range labels, and hand-computed values. Assert the 4,096 cap and never derive expected statistics through production helpers.
 - Histogram fixtures name every bucket/count and cover even/odd ranks, partial-bucket trimming, inclusive 24/235 cutoffs, 95/96 totals, 31/32 regions, partition errors, NaN, ellipse edges, and right/bottom equality.
+- Lighting classification fixtures must satisfy metric count/fraction invariants and state expected outcomes independently. For persistence boundaries, include intermediate samples no more than 300 ms apart; a 301 ms gap intentionally discards the current sample.
+- Exercise candidate changes as `(assessment, side)` keys. Separate exposure entry/exit, imbalance entry/strict-exit, high-contrast recovery, invalid/nil-pose reset, out-of-order rejection, and fresh-observation-only compact timing.
 - Build lifecycle fixtures through reducer events; direct state mutation is reserved for otherwise unreachable overflow boundaries and seeding history that a test explicitly names.
 - Focused command: `xcodebuild -project facetracking.xcodeproj -scheme facetracking -destination 'platform=iOS Simulator,id=<DISCOVERED_UDID>' -only-testing:facetrackingTests test` with temporary DerivedData and result-bundle paths.
 - `AGENTS.md` is excluded from synchronized-group target membership and test bundles.

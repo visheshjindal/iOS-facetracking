@@ -7,6 +7,7 @@ struct CaptureViewState: Equatable {
     let cameraStatus: CameraStatus
     let selection: CameraSelection?
     let rawFace: FaceSample?
+    let guidance: CaptureGuidanceProjection
 
     var showsPreview: Bool {
         authorization == .authorized && failure == nil
@@ -19,5 +20,6 @@ struct CaptureViewState: Equatable {
         cameraStatus = session.cameraStatus
         self.selection = selection
         rawFace = session.rawFace
+        guidance = GuidanceRules.project(session: session)
     }
 }

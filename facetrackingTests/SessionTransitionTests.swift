@@ -33,7 +33,7 @@ final class SessionTransitionTests: XCTestCase {
 
     func testS02ObsoleteIdentityRevisionAndTimestampsLeaveEntireResultUnchanged() {
         var state = runningState()
-        state.lightingHistory.candidateAssessment = .dark
+        state.lightingHistory.candidateAssessment = .tooDark
         state.lightingHistory.candidateSinceMS = 10
         apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: 100)), to: &state)
 
@@ -256,7 +256,7 @@ final class SessionTransitionTests: XCTestCase {
     private func populatedRunningState(timestampMS: Int64 = 100) -> SessionState {
         var state = runningState()
         apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: timestampMS)), to: &state)
-        state.lightingHistory.activeAssessment = .dark
+        state.lightingHistory.activeAssessment = .tooDark
         state.lightingHistory.candidateAssessment = .acceptable
         state.lightingHistory.previousSampleMS = timestampMS
         return state

@@ -11,7 +11,7 @@ Planning files created on 2026-09-21. No application implementation or verificat
 | 04 Coordinate mapping | Complete | Passed (G01/G02 transforms; 35 total tests; unsigned build) | Partial pass on iPhone 17/iOS 27: portrait, mirror, edge crop, reopen passed; live mapped boxes/clean aperture pending R02 | [04](handoffs/04.md) |
 | 05 Vision and freshness | Complete | Passed (46/46 tests; unsigned device build) | Pending R01/R02/R03/R05 physical evidence | [05](handoffs/05.md) |
 | 06 Lighting measurement | Complete | Passed (L01–L03/G02; 59/59 tests; unsigned build) | Pending R02/R04 physical evidence and calibration | [06](handoffs/06.md) |
-| 07 Lighting guidance | Not started | Not run | Pending R02/R04 | Not created |
+| 07 Lighting guidance | Complete | Passed (L04–L10; 74/74 tests; unsigned build) | Pending R02/R04 physical direction, stability, and usefulness evidence | [07](handoffs/07.md) |
 | 08 Capture interface | Not started | Not run | Pending | Not created |
 | 09 Accessibility/UI tests | Not started | Not run | Pending | Not created |
 | 10 Reliability/performance | Not started | Not run | Pending R05/R06 | Not created |
@@ -23,4 +23,4 @@ All R01–R07 remain OPEN. Plan 00 created the detailed [research register](rese
 
 ## Next action
 
-Plan 07 is implementation-ready from automated prerequisites. Plan 06 provides immutable validated `FaceLightingMetrics` on canonical 0–255 units, or nil for unsupported/ineligible/insufficient/stale frames. Plan 07 must consume metrics only and add pure classification/persistence; it must not access pixel buffers or retune provisional thresholds. R02/R04 and all other unaccepted research gates remain open.
+Plan 08 is implementation-ready from automated prerequisites. Plan 07 provides typed `CaptureGuidanceProjection` values for primary guidance, lighting badge/advice/presentation, initial mask, return guide, and raw tracked oval. Plan 08 must localize and render those projections without duplicating classification or priority logic. R02/R04 and all other unaccepted research gates remain open.
