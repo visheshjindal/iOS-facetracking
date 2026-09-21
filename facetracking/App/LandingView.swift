@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LandingView: View {
+    let dependencies: CaptureDependencies
     @State private var isPresentingCapture = false
 
     var body: some View {
@@ -23,7 +24,7 @@ struct LandingView: View {
         }
         .padding(32)
         .fullScreenCover(isPresented: $isPresentingCapture) {
-            CapturePlaceholderView {
+            CaptureRoute(dependencies: dependencies) {
                 isPresentingCapture = false
             }
         }
@@ -31,5 +32,5 @@ struct LandingView: View {
 }
 
 #Preview {
-    LandingView()
+    LandingView(dependencies: .live())
 }

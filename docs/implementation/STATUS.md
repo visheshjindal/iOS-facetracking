@@ -7,7 +7,7 @@ Planning files created on 2026-09-21. No application implementation or verificat
 | 00 Project foundation | Complete | Passed | Pending D02/R07 and human shell/device smoke | [00](handoffs/00.md) |
 | 01 Models and positioning | Complete | Passed (P01–P09; 10 total unit tests) | Not applicable to pure code; R01/R02/R03 remain open | [01](handoffs/01.md) |
 | 02 Session state | Complete | Passed (S01–S06; 19 total unit tests; unsigned build) | Not applicable to pure reducer; F13/F14 physical integration pending plans 03/05 | [02](handoffs/02.md) |
-| 03 Camera and preview | Not started | Not run | Pending | Not created |
+| 03 Camera and preview | Complete | Passed (27 total tests; unsigned build; focused simulator TSan fake paths) | Partial pass: user verified physical permission flow and live camera view; extended lifecycle/race and measured-format checks pending | [03](handoffs/03.md) |
 | 04 Coordinate mapping | Not started | Not run | Pending R02 | Not created |
 | 05 Vision and freshness | Not started | Not run | Pending R01/R02/R03/R05 | Not created |
 | 06 Lighting measurement | Not started | Not run | Pending R02/R04 | Not created |
@@ -23,4 +23,4 @@ All R01–R07 remain OPEN. Plan 00 created the detailed [research register](rese
 
 ## Next action
 
-Plan 03 is implementation-ready: plan 02 provides the pure session state, synchronous reducer entry point, event/effect contracts, checked attempt/revision policies, and passing S01–S06 coverage. Open a new chat with [plan 03](../../plans/03-camera-preview.md), following [the usage instructions](../../plans/README.md). Keep F13/F14 physical integration and R01–R07 open unless their required evidence is supplied.
+Plan 04 is implementation-ready from automated prerequisites: plan 03 provides stable camera/preview ownership, an explicit mirrored-preview/unmirrored-output policy, reducer-driven lifecycle, passing fake/store verification, and a user-verified physical permission flow/live camera view. Open a new chat with [plan 04](../../plans/04-coordinate-mapping.md), following [the usage instructions](../../plans/README.md). Keep unreported permission variants, extended F13/F14 lifecycle/measurement checks, R02, and R01–R07 open unless their required evidence is supplied.
