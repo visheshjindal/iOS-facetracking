@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import OSLog
 
 struct CameraSelection: Sendable, Equatable {
     let widthPixels: Int32
@@ -14,6 +15,7 @@ struct CameraSelection: Sendable, Equatable {
 enum CameraServiceEvent: Sendable, Equatable {
     case started(sessionID: UInt64, selection: CameraSelection)
     case stopped(sessionID: UInt64)
+    case mediaServicesReset(sessionID: UInt64)
     case interrupted(sessionID: UInt64)
     case interruptionEnded
     case failed(sessionID: UInt64, failure: SessionFailure)
@@ -44,6 +46,7 @@ protocol CameraSessionControlling: AnyObject {
 final class CameraSessionService: CameraSessionControlling, @unchecked Sendable {
     let previewSession: CameraPreviewSession
 
+    private static let logger = Logger(subsystem: "xim.facetracking", category: "camera")
     private let cameraQueue = DispatchQueue(label: "xim.facetracking.camera.session")
     private let outputQueue = DispatchQueue(label: "xim.facetracking.camera.output")
     private let analyzer: FrameAnalyzer
@@ -125,14 +128,16 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
                 }
             )
             activeSessionID = sessionID
-            installObserversIfNeeded()
+            removeObservers()
+            installObservers(sessionID: sessionID)
             if !previewSession.session.isRunning { previewSession.session.startRunning() }
-            guard activeSessionID == sessionID else { return }
+            // Queue confinement prevents stop/failure commands interleaving here.
             eventHandler(.started(sessionID: sessionID, selection: selection))
         } catch let failure as SessionFailureError {
             activeSessionID = nil
             eventHandler(.failed(sessionID: sessionID, failure: failure.failure))
         } catch {
+            logFailure(CameraFailureDetails(error: error as NSError))
             activeSessionID = nil
             eventHandler(.failed(sessionID: sessionID, failure: .cameraUnavailable))
         }
@@ -196,26 +201,23 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
             if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) { device.whiteBalanceMode = .continuousAutoWhiteBalance }
             let duration = CMTime(value: 1, timescale: CMTimeScale(requestedFPS))
             let configuredFPS: Double?
-            if device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= 30 && $0.maxFrameRate >= 30 }) {
+            if device.activeFormat.videoSupportedFrameRateRanges.contains(where: { $0.minFrameRate <= Double(requestedFPS) && $0.maxFrameRate >= Double(requestedFPS) }) {
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
-                configuredFPS = 30
+                configuredFPS = Double(requestedFPS)
             } else {
                 configuredFPS = nil
             }
 
-            let requestedRotation: CGFloat = 90
-            var appliedRotation: CGFloat = 0
-            if let connection = output.connection(with: .video) {
-                if connection.isVideoRotationAngleSupported(requestedRotation) {
-                    connection.videoRotationAngle = requestedRotation
-                    appliedRotation = requestedRotation
-                }
-                if connection.isVideoMirroringSupported {
-                    connection.automaticallyAdjustsVideoMirroring = false
-                    connection.isVideoMirrored = false
-                }
+            guard let connection = output.connection(with: .video),
+                  CameraPortraitOrientation.configure(connection, device: device) else {
+                throw SessionFailureError(.cameraUnavailable)
             }
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = false
+            }
+            let appliedRotation = connection.videoRotationAngle
             let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
             selection = CameraSelection(
                 widthPixels: dimensions.width,
@@ -238,8 +240,8 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
         }
     }
 
-    private func installObserversIfNeeded() {
-        guard notificationTokens.isEmpty else { return }
+    private func installObservers(sessionID: UInt64) {
+        dispatchPrecondition(condition: .onQueue(cameraQueue))
         let center = NotificationCenter.default
         notificationTokens.append(center.addObserver(
             forName: .AVCaptureSessionWasInterrupted,
@@ -255,7 +257,10 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
             forName: .AVCaptureSessionRuntimeError,
             object: previewSession.session,
             queue: nil
-        ) { [weak self] _ in self?.forwardRuntimeError() })
+        ) { [weak self] notification in
+            let details = CameraFailureDetails(notification: notification)
+            self?.forwardRuntimeError(details, sessionID: sessionID)
+        })
     }
 
     private func forwardInterruption() {
@@ -269,16 +274,30 @@ final class CameraSessionService: CameraSessionControlling, @unchecked Sendable 
         cameraQueue.async { [weak self] in self?.eventHandler?(.interruptionEnded) }
     }
 
-    private func forwardRuntimeError() {
+    private func forwardRuntimeError(_ details: CameraFailureDetails, sessionID: UInt64) {
         cameraQueue.async { [weak self] in
-            guard let self, let id = activeSessionID else { return }
+            guard let self, activeSessionID == sessionID else { return }
+            logFailure(details)
             activeSessionID = nil
-            analyzer.invalidate(sessionID: id)
-            eventHandler?(.failed(sessionID: id, failure: .cameraUnavailable))
+            analyzer.invalidate(sessionID: sessionID)
+            if details.isMediaServicesReset {
+                // The reducer allocates a fresh generation and orders stop/start.
+                // It also rejects recovery after route exit or loss of eligibility.
+                eventHandler?(.mediaServicesReset(sessionID: sessionID))
+            } else {
+                eventHandler?(.failed(sessionID: sessionID, failure: .cameraUnavailable))
+            }
         }
     }
 
+    private func logFailure(_ details: CameraFailureDetails) {
+        dispatchPrecondition(condition: .onQueue(cameraQueue))
+        let code = details.code.map(String.init) ?? "missing"
+        Self.logger.error("Camera failure domain=\(details.domain.rawValue, privacy: .public) code=\(code, privacy: .public)")
+    }
+
     private func removeObservers() {
+        dispatchPrecondition(condition: .onQueue(cameraQueue))
         notificationTokens.forEach(NotificationCenter.default.removeObserver)
         notificationTokens.removeAll()
     }

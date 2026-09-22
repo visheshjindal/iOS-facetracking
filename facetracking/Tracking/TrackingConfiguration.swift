@@ -5,7 +5,7 @@
 struct TrackingConfiguration: Sendable, Equatable {
     static let provisional = TrackingConfiguration()
 
-    let version = "ios-provisional-v1"
+    let version = "ios-provisional-v2"
     let timing = Timing()
     let positioning = Positioning()
     let sampling = Sampling()
@@ -25,8 +25,9 @@ struct TrackingConfiguration: Sendable, Equatable {
     }
 
     struct Positioning: Sendable, Equatable {
-        let centerToleranceTargetFraction: Double = 0.10
-        let minimumFaceScaleTargetFraction: Double = 0.65
+        let centerToleranceTargetFraction: Double = 0.15
+        let followingCenterToleranceTargetFraction: Double = 0.25
+        let minimumFaceScaleTargetFraction: Double = 0.50
         let maximumFaceScaleTargetFraction: Double = 0.95
         let poseEntryYawDegrees: Double = 10
         let poseEntryPitchDegrees: Double = 15

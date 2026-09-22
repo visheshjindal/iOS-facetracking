@@ -35,7 +35,7 @@ This specification was derived from the active tracking, positioning, lighting, 
 | D06 | Guidance filtering and drawing are independent | Preserve the 150 ms time-based filter used for positioning decisions. Draw from current measured geometry initially. Any later drawing interpolation must not change guidance inputs. |
 | D07 | Native permission and Exit behavior | Denied access uses Settings; restricted access explains the restriction. Exit dismisses the capture route or returns to a landing screen. Never terminate the process programmatically. |
 | D08 | Stale observation withdrawal | Add an explicit freshness event so a stalled detector cannot leave a green face frozen on screen. Withdraw the face after 300 ms without fresh usable results; show a failure after 5,000 ms without analysis results. This clarifies a stale-UI edge case. |
-| D09 | Provisional lighting profile | Start with the numerical profile below as `ios-provisional-v1`. It requires iPhone calibration; copied thresholds are not evidence of accuracy. |
+| D09 | Provisional lighting profile | Current numerical profile is `ios-provisional-v2`, revised from v1 for user-requested positioning tolerance on 2026-09-22. It requires iPhone calibration; copied thresholds are not evidence of accuracy. |
 
 If discovery changes a decision, update this document, the versioned configuration, and the affected acceptance tests together. Do not silently replace a requirement with an easier implementation.
 
@@ -46,7 +46,7 @@ If discovery changes a decision, update this document, the versioned configurati
 | F01 | Camera permission | Before authorization, show an explanation and appropriate actions. Camera work starts only after authorization, an active scene, and valid preview geometry. |
 | F02 | Live preview | Show the portrait front camera mirrored like a mirror, cropped to fill the defined viewport. Preview remains responsive during analysis. |
 | F03 | Initial guide | Render an opaque white surface outside a centered transparent oval; camera content is visible through the oval. |
-| F04 | Positioning corrections | Before acquisition, provide place, center, closer, farther, look-straight, and hold-still prompts with the priority in section 7. |
+| F04 | Positioning corrections | Before acquisition, provide place, directional centering (left/right/up/down), closer, farther, look-straight, and hold-still prompts with the priority in section 7. |
 | F05 | Stable acquisition | Require 2,000 ms of continuous eligible alignment; movement, absence, unusable pose, or a gap over 300 ms restarts the hold. |
 | F06 | Following | Fade the white mask away over 450 ms, draw a green oval around the primary face, and retain a fixed white return guide. |
 | F07 | Corrections while following | Continue left/right/up/down, distance, and pose corrections. Corrections never return the session to initial acquisition. |
@@ -56,7 +56,7 @@ If discovery changes a decision, update this document, the versioned configurati
 | F11 | Stable lighting UI | Apply warning/recovery persistence and hysteresis. Show a compact acceptable badge after 1,500 ms of continuously acceptable candidate evidence. |
 | F12 | Priority | Positioning corrections take primary-banner priority over lighting. Lighting advice may replace hold/following text only. |
 | F13 | Error recovery | Front-camera absence, authorization loss, detector error, analysis stall, and interruptions produce the specified recoverable UI. |
-| F14 | Lifecycle | Stop on route dismissal or scene inactivity. Resume with fresh session state when eligible. Reject all obsolete callbacks. |
+| F14 | Lifecycle | Stop on route dismissal or scene inactivity. Resume with a fresh camera generation and cleared measurements when eligible, preserving completed acquisition within the capture route. Reject all obsolete callbacks. |
 | F15 | Accessibility | Localized copy, Dynamic Type, VoiceOver labels, adequate contrast and touch targets, and Reduce Motion support. |
 | F16 | Privacy | Process camera frames in memory; never persist or log frames, face crops, landmarks, or identifying face data. No network service is needed. |
 
@@ -170,7 +170,7 @@ struct FrameObservation: Sendable {
 
 Coordinate convention: normalized mirrored viewport, top-left origin, x increasing rightward and y downward. Width and height are normalized separately. Geometry can extend outside the viewport during tracking; do not clamp a partially visible face into a falsely centered face. Require finite values, positive dimensions, and viewport intersection for a usable face. Missing pose still permits a measured outline in following mode, but never passes alignment or lighting eligibility.
 
-`SessionState` owns authorization, scene activity, viewport/revision, session ID, desired running state, camera status, stage, current raw face, last accepted sample time, positioning history, lighting history, and current failure. Stage is `.aligning` or `.following`; tracking loss is derived from face absence while following, not a second acquisition stage.
+`SessionState` owns authorization, scene activity, viewport/revision, session ID, desired running state, camera status, stage, current raw face, last accepted sample time, positioning history, lighting history, and current failure. Stage is `.aligning` or `.following`; tracking loss is derived from face absence while following, not a second acquisition stage. Completed acquisition survives scene suspension, camera interruption/failure recovery, and viewport changes within the same route; these still invalidate camera generations and clear all face, filter, hold, lighting, and timing data. Exit/route removal and explicit Restart tracking restore alignment. An incomplete hold never survives a pause.
 
 `PositioningHistory` owns filtered geometry/pose, pose latch, hold anchor, stable-since time, and previous accepted observation time. `LightingHistory` owns active assessment/side, candidate assessment/side/start time, acceptable-evidence start time, and previous sample time. Clear histories on a new session.
 
@@ -182,16 +182,17 @@ Derive mask visibility, return-guide visibility, banner, badge state, and tracke
 
 | Event / condition | State effect | Camera effect |
 | --- | --- | --- |
-| Authorized + active + positive viewport + no failure | Allocate next ID; clear histories; align | Start once |
+| Authorized + active + positive viewport + no failure | Allocate next ID; clear histories; preserve completed acquisition within the route | Start once |
 | Duplicate eligible lifecycle event | No change | None |
 | Inactive, dismissed, or access revoked | Clear face, histories, timers; no active attempt | Stop once |
-| Real viewport or transform change | Increment geometry revision; discard old geometry; new alignment session | Ordered stop, then new start |
+| Real viewport or transform change | Increment geometry revision; discard old geometry; new camera generation retaining acquired stage | Ordered stop, then new start |
 | Valid current observation with increasing timestamp | Update positioning, lighting, then primary guidance | None |
 | Wrong ID/revision, stopped attempt, or non-increasing timestamp | Ignore entirely | None |
-| Retry while eligible | Clear failure and histories; allocate next ID | Ordered stop then start |
-| Current camera/detector failure | Clear face/history; show error | Stop |
+| Retry while eligible | Clear failure and histories; allocate next ID, retaining acquired stage | Ordered stop then start |
+| Current camera/detector failure other than media-services reset | Clear face/history; show error | Stop; explicit Retry |
+| Current AVFoundation media-services reset | Clear measurements/history; retain acquired stage; allocate fresh generation when eligible | Ordered stop/start using existing configured session |
 | Interruption | Clear face/history; show paused-camera explanation | Suspend/stop on camera owner |
-| Interruption ends, still eligible | Clear interruption; allocate new attempt | Start once |
+| Interruption ends, still eligible | Clear interruption; allocate new camera generation, retaining acquired stage | Start once |
 | Freshness timeout | Clear face; reset continuity and lighting; keep following stage if acquired | Continue waiting for analysis |
 | Five-second analysis stall | Detector-unavailable error | Stop; require retry |
 
@@ -274,7 +275,7 @@ Map all four corners and rebuild an axis-aligned bounding rectangle. Apply orien
 
 Map luma sample centers from raw buffer coordinates through the same rotation/crop/mirror transform. Do not transform luma as though it were already Vision-normalized. Mirror exactly once. Preview mirroring must not implicitly mirror already-mirrored observations again.
 
-For portrait rotation, use supported `videoRotationAngle` APIs and check support before setting a value. A fixed interface orientation does not guarantee upright delivered pixels. Do not both physically rotate the data output and describe the original orientation to Vision. [Apple: rotation support](https://developer.apple.com/documentation/avfoundation/avcaptureconnection/isvideorotationanglesupported(_:))
+For portrait rotation, use supported `videoRotationAngle` APIs and check support before setting a value. Resolve the fixed portrait angle for the actual camera on both connections (iOS 27 static device-relative query; semantic portrait orientation on earlier supported OS versions). Do not mix a gravity-driven preview with a fixed sensor-angle data output. Require physically portrait-oriented data output and pass it to Vision as `.up`, independent of the sensor angle applied. A fixed interface orientation does not guarantee upright delivered pixels. Do not both physically rotate the data output and describe the original orientation to Vision. [Apple: rotation support](https://developer.apple.com/documentation/avfoundation/avcaptureconnection/isvideorotationanglesupported(_:))
 
 ### Visual contract
 
@@ -305,8 +306,9 @@ Draw with SwiftUI `Shape`/`Canvas` or lightweight shape layers. The return guide
 | Hold | 2,000 ms | Continuous eligible acquisition |
 | Maximum sample gap | 300 ms inclusive | 300 continues; 301 resets |
 | Guidance EMA time constant | 150 ms | Applied to geometry and known pose |
-| Center tolerance | 0.10 × target width/height | Separate axis tolerances |
-| Minimum face scale | 0.65 × target dimensions | Both dimensions must meet minimum |
+| Alignment center tolerance | 0.15 × target width/height | Separate inclusive axis tolerances |
+| Following center tolerance | 0.25 × target width/height | Allows natural movement after acquisition |
+| Minimum face scale | 0.50 × target dimensions | Both dimensions must meet minimum |
 | Maximum face scale | 0.95 × target dimensions | Neither dimension may exceed maximum |
 | Pose entry limits | yaw 10°, pitch 15°, roll 8° | Absolute values, inclusive |
 | Pose exit limits | yaw 13°, pitch 20°, roll 11° | Used while pose-valid latch is set |
@@ -333,8 +335,8 @@ All these are initial heuristic settings. Geometry and pose thresholds need conf
 | Priority | Condition | Alignment hint | Following hint |
 | --- | --- | --- | --- |
 | 1 | No usable face / no target | Place face | Tracking lost |
-| 2 | Horizontal center outside tolerance | Center face | Face left of target: Move right; face right: Move left |
-| 3 | Vertical center outside tolerance | Center face | Face above target: Move down; face below: Move up |
+| 2 | Horizontal center outside tolerance | Face left of target: Move right; face right: Move left | Face left of target: Move right; face right: Move left |
+| 3 | Vertical center outside tolerance | Face above target: Move down; face below: Move up | Face above target: Move down; face below: Move up |
 | 4 | Width OR height greater than maximum | Farther | Farther |
 | 5 | Width OR height less than minimum | Closer | Closer |
 | 6 | Pose unknown or outside applicable limits | Look straight | Look straight |
@@ -399,7 +401,7 @@ While any uneven warning is active, use the uneven exit thresholds for both axes
 3. Classify using the active warning's hysteresis bands.
 4. If classification and side match the active state, clear any pending candidate and retain the active state.
 5. Otherwise start or continue a candidate keyed by assessment **and** side. Candidate changes restart its timer.
-6. Commit warnings after at least 400 ms; commit acceptable after at least 700 ms. Before commit keep the prior active state.
+6. Commit warnings after at least 400 ms; commit acceptable after at least 700 ms. Before commit keep the prior active state internally for hysteresis. If the retained state is a warning and a replacement candidate is pending, project checking/unknown instead of continuing the contradicted warning. Restore it if fresh evidence supports it again; show the replacement only when its persistence requirement passes.
 7. When acceptable commits, store the candidate start as acceptable-evidence start. Compact the badge after at least 1,500 ms from that start, not 1,500 ms after the 700 ms commit. Compute from fresh observations; wall-clock passage without measurements does not establish acceptable evidence.
 8. An invalid sample immediately withdraws acceptable status. A brief uncommitted warning candidate does not replace the active acceptable assessment; on warning commit, expand again when positioning permits.
 

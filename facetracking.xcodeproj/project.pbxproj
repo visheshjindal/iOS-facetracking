@@ -37,6 +37,7 @@
 				App/AGENTS.md,
 				Camera/AGENTS.md,
 				CaptureUI/AGENTS.md,
+				Resources/AGENTS.md,
 				Tracking/AGENTS.md,
 			);
 			target = 6177349E30605BD000B103FE /* facetracking */;

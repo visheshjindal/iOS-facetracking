@@ -65,6 +65,10 @@ final class CaptureStore {
         send(.retry(atMS: now))
     }
 
+    func restartAfterLoss() {
+        send(.restartAfterLoss(atMS: now))
+    }
+
     func exit() {
         send(.exit(atMS: now))
     }
@@ -149,6 +153,8 @@ final class CaptureStore {
             send(.cameraStarted(sessionID: sessionID))
         case let .stopped(sessionID):
             send(.cameraStopped(sessionID: sessionID))
+        case let .mediaServicesReset(sessionID):
+            send(.cameraMediaServicesReset(sessionID: sessionID, atMS: now))
         case let .interrupted(sessionID):
             send(.cameraInterrupted(sessionID: sessionID))
         case .interruptionEnded:

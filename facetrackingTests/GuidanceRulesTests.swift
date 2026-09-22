@@ -127,6 +127,24 @@ final class GuidanceRulesTests: XCTestCase {
         XCTAssertEqual(state.positioningHint, .lookStraight)
     }
 
+    func testL08ContradictedWarningIsHiddenWhileReplacementSettles() {
+        var state = projectionState(hint: .following, assessment: .uneven, side: .right)
+        for (candidate, side): (LightingAssessment, LightingSide?) in [(.uneven, .left), (.uneven, nil), (.acceptable, nil), (.tooDark, nil)] {
+            state.lightingHistory.candidateAssessment = candidate
+            state.lightingHistory.candidateSide = side
+            let projection = GuidanceRules.project(session: state)
+            XCTAssertEqual(projection.primary, .positioning(.following))
+            XCTAssertEqual(projection.badge?.assessment, .unknown)
+            XCTAssertEqual(projection.badge?.advice, .checking)
+            XCTAssertNil(projection.badge?.side)
+            // Rendering never changes the reducer's retained hysteresis state.
+            XCTAssertEqual(state.lightingHistory.activeSide, .right)
+        }
+        state.lightingHistory.candidateAssessment = nil
+        state.lightingHistory.candidateSide = nil
+        XCTAssertEqual(GuidanceRules.project(session: state).primary, .lighting(.addLightRight))
+    }
+
     private let face = FaceSample(
         geometry: FaceGeometry(centerX: 0.5, centerY: 0.5, width: 0.5, height: 0.4),
         pose: FacePose(yawDegrees: 0, pitchDegrees: 0, rollDegrees: 0)

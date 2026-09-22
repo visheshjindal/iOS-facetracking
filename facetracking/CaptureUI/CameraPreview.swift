@@ -4,14 +4,17 @@ import SwiftUI
 @MainActor
 struct CameraPreview: UIViewRepresentable {
     let previewSession: CameraPreviewSession
+    let onViewportChanged: (CGSize) -> Void
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
+        view.onViewportChanged = onViewportChanged
         view.attach(session: previewSession.session)
         return view
     }
 
     func updateUIView(_ view: PreviewView, context: Context) {
+        view.onViewportChanged = onViewportChanged
         if view.previewLayer.session !== previewSession.session {
             view.attach(session: previewSession.session)
         }
@@ -21,7 +24,7 @@ struct CameraPreview: UIViewRepresentable {
 
 @MainActor
 final class PreviewView: UIView {
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    var onViewportChanged: ((CGSize) -> Void)?
 
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
 
@@ -42,30 +45,22 @@ final class PreviewView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         configureConnection()
+        onViewportChanged?(bounds.size)
     }
 
     func attach(session: AVCaptureSession) {
-        rotationCoordinator = nil
         previewLayer.session = session
         configureConnection()
     }
 
     func configureConnection() {
         guard let connection = previewLayer.connection else { return }
-        if rotationCoordinator == nil,
-           let input = previewLayer.session?.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).first {
-            rotationCoordinator = AVCaptureDevice.RotationCoordinator(
-                device: input.device,
-                previewLayer: previewLayer
-            )
-        }
         if connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false
             connection.isVideoMirrored = true
         }
-        if let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelPreview,
-           connection.isVideoRotationAngleSupported(angle) {
-            connection.videoRotationAngle = angle
+        if let input = previewLayer.session?.inputs.compactMap({ $0 as? AVCaptureDeviceInput }).first {
+            _ = CameraPortraitOrientation.configure(connection, device: input.device)
         }
     }
 }

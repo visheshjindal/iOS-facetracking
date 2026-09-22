@@ -18,6 +18,16 @@
 - Histogram fixtures name every bucket/count and cover even/odd ranks, partial-bucket trimming, inclusive 24/235 cutoffs, 95/96 totals, 31/32 regions, partition errors, NaN, ellipse edges, and right/bottom equality.
 - Lighting classification fixtures must satisfy metric count/fraction invariants and state expected outcomes independently. For persistence boundaries, include intermediate samples no more than 300 ms apart; a 301 ms gap intentionally discards the current sample.
 - Exercise candidate changes as `(assessment, side)` keys. Separate exposure entry/exit, imbalance entry/strict-exit, high-contrast recovery, invalid/nil-pose reset, out-of-order rejection, and fresh-observation-only compact timing.
+- U01–U04 projection fixtures assert stable localization/action identifiers, mask/guide/outline state, badge style/label, and raw-versus-filtered geometry without introspecting SwiftUI layout. Build acquisition fixtures with injected timestamps through 1,999/2,000 ms.
+- `CaptureFixture.allCases` must construct state without authorization or camera services. Keep the DEBUG launch harness isolated from release composition and cover that invariant by source/bundle audit.
 - Build lifecycle fixtures through reducer events; direct state mutation is reserved for otherwise unreachable overflow boundaries and seeding history that a test explicitly names.
 - Focused command: `xcodebuild -project facetracking.xcodeproj -scheme facetracking -destination 'platform=iOS Simulator,id=<DISCOVERED_UDID>' -only-testing:facetrackingTests test` with temporary DerivedData and result-bundle paths.
 - `AGENTS.md` is excluded from synchronized-group target membership and test bundles.
+
+- Acquisition regressions must pass asymmetric detector bounds through `FrameAnalyzer`, then positioning. Cover physically upright buffers whose applied sensor angles are 0/90/180/270; Vision must receive `.up` and no second rotation.
+
+- Acquire through continuous reducer observations before lifecycle retention assertions; test fresh-generation recovery, stale callback rejection, incomplete-hold reset, and explicit Restart/Exit separately.
+
+- Cover stage-specific center boundaries and acquisition with minimum-size faces. Luma direction regressions should use patterned Y-plane buffers through analyzer, reducer, and projection (both mirrored sides, recovery, dark and bright), not only fabricated metrics.
+
+- Runtime-error tests cover AVFoundation code/domain matching, missing/malformed payloads, recovery effect order and stale/inactive/denied/exit rejection. Never use a real media-services reset in automated camera-free tests.

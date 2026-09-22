@@ -36,7 +36,7 @@ final class PositioningRulesTests: XCTestCase {
     // P03 — Detection alone is insufficient.
     func testP03EveryIneligibleConditionPreventsAcquisition() {
         let fixtures: [FaceSample?] = [
-            face(centerX: 0.55), face(centerY: 0.561), face(width: 0.381), face(width: 0.259),
+            face(centerX: 0.561), face(centerY: 0.591), face(width: 0.381), face(width: 0.199),
             face(pose: nil), face(pose: FacePose(yawDegrees: 10.01, pitchDegrees: 0, rollDegrees: 0)),
             FaceSample(geometry: FaceGeometry(centerX: .nan, centerY: 0.5, width: 0.3, height: 0.45), pose: neutralPose),
             FaceSample(geometry: FaceGeometry(centerX: 1.2, centerY: 0.5, width: 0.2, height: 0.2), pose: neutralPose), nil
@@ -54,14 +54,14 @@ final class PositioningRulesTests: XCTestCase {
 
     // P04 — Inclusive positioning, pose, and anchor boundaries.
     func testP04ExactBoundariesPassAndJustOutsideFails() {
-        XCTAssertEqual(update(.empty, .aligning, face: face(centerX: 0.54), at: 0).hint, .holdStill)
-        XCTAssertEqual(update(.empty, .aligning, face: face(centerX: 0.540_001), at: 0).hint, .centerFace)
-        XCTAssertEqual(update(.empty, .aligning, face: face(centerY: 0.56), at: 0).hint, .holdStill)
-        XCTAssertEqual(update(.empty, .aligning, face: face(centerY: 0.560_001), at: 0).hint, .centerFace)
+        XCTAssertEqual(update(.empty, .aligning, face: face(centerX: 0.56), at: 0).hint, .holdStill)
+        XCTAssertEqual(update(.empty, .aligning, face: face(centerX: 0.560_001), at: 0).hint, .moveLeft)
+        XCTAssertEqual(update(.empty, .aligning, face: face(centerY: 0.59), at: 0).hint, .holdStill)
+        XCTAssertEqual(update(.empty, .aligning, face: face(centerY: 0.590_001), at: 0).hint, .moveUp)
         XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.38, height: 0.57), at: 0).hint, .holdStill)
         XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.380_001, height: 0.39), at: 0).hint, .farther)
-        XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.26, height: 0.39), at: 0).hint, .holdStill)
-        XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.259_999, height: 0.57), at: 0).hint, .closer)
+        XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.20, height: 0.30), at: 0).hint, .holdStill)
+        XCTAssertEqual(update(.empty, .aligning, face: face(width: 0.199_999, height: 0.57), at: 0).hint, .closer)
 
         let entryEdges = [
             FacePose(yawDegrees: 10, pitchDegrees: 0, rollDegrees: 0),
@@ -153,9 +153,9 @@ final class PositioningRulesTests: XCTestCase {
     // P08 — Following reports every correction without reacquisition.
     func testP08FollowingCorrectionsAndPriority() {
         let fixtures: [(FaceSample?, PositioningHint)] = [
-            (nil, .trackingLost), (face(centerX: 0.459), .moveRight), (face(centerX: 0.541), .moveLeft),
-            (face(centerY: 0.439), .moveDown), (face(centerY: 0.561), .moveUp),
-            (face(width: 0.381), .farther), (face(width: 0.259), .closer),
+            (nil, .trackingLost), (face(centerX: 0.399), .moveRight), (face(centerX: 0.601), .moveLeft),
+            (face(centerY: 0.349), .moveDown), (face(centerY: 0.651), .moveUp),
+            (face(width: 0.381), .farther), (face(width: 0.199), .closer),
             (face(width: 0.381, height: 0.389), .farther),
             (face(pose: FacePose(yawDegrees: 10.01, pitchDegrees: 0, rollDegrees: 0)), .lookStraight),
             (face(), .following)
@@ -185,8 +185,50 @@ final class PositioningRulesTests: XCTestCase {
         XCTAssertNotEqual(unknown.filteredFace?.geometry.centerX, unknown.rawFace?.geometry.centerX)
         XCTAssertNil(unknown.filteredFace?.pose)
 
-        let corrected = update(.empty, .following, face: face(centerX: 0.6), at: 0)
+        let corrected = update(.empty, .following, face: face(centerX: 0.601), at: 0)
         XCTAssertFalse(corrected.isLightingEligible)
+    }
+
+    func testP04AlignmentGivesActionableDirectionsWithHorizontalPriority() {
+        let fixtures: [(FaceSample, PositioningHint)] = [
+            (face(centerX: 0.439), .moveRight), (face(centerX: 0.561), .moveLeft),
+            (face(centerY: 0.409), .moveDown), (face(centerY: 0.591), .moveUp),
+            (face(centerX: 0.439, centerY: 0.591), .moveRight)
+        ]
+        for (sample, expected) in fixtures {
+            let result = update(.empty, .aligning, face: sample, at: 0)
+            XCTAssertEqual(result.hint, expected)
+            XCTAssertNil(result.history.stableSinceMS)
+            XCTAssertEqual(result.stage, .aligning)
+        }
+    }
+
+    func testP04FollowingAllowsNaturalMovementAndFartherFaceAtInclusiveLimits() {
+        // Target width .4, height .6: following margins .10/.15; min size .20/.30.
+        for sample in [face(centerX: 0.4), face(centerX: 0.6),
+                       face(centerY: 0.35), face(centerY: 0.65),
+                       face(width: 0.20, height: 0.30)] {
+            let result = update(.empty, .following, face: sample, at: 0)
+            XCTAssertEqual(result.hint, .following)
+            XCTAssertTrue(result.isLightingEligible)
+        }
+        for (sample, expected) in [(face(centerX: 0.399_999), PositioningHint.moveRight),
+                                   (face(centerX: 0.600_001), .moveLeft),
+                                   (face(centerY: 0.349_999), .moveDown),
+                                   (face(centerY: 0.650_001), .moveUp),
+                                   (face(width: 0.199_999), .closer),
+                                   (face(height: 0.299_999), .closer)] {
+            XCTAssertEqual(update(.empty, .following, face: sample, at: 0).hint, expected)
+        }
+        // This comfortable following position still needs adjustment for first acquisition.
+        XCTAssertEqual(update(.empty, .aligning, face: face(centerY: 0.62), at: 0).hint, .moveUp)
+        XCTAssertEqual(update(.empty, .following, face: face(centerY: 0.62), at: 0).hint, .following)
+        var history = PositioningHistory.empty
+        for time in stride(from: Int64(0), through: 2_000, by: 250) {
+            let result = update(history, .aligning, face: face(width: 0.20, height: 0.30), at: time)
+            XCTAssertEqual(result.stage, time < 2_000 ? .aligning : .following)
+            history = result.history
+        }
     }
 
     private var neutralPose: FacePose { FacePose(yawDegrees: 0, pitchDegrees: 0, rollDegrees: 0) }

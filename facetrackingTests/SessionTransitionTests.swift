@@ -244,6 +244,93 @@ final class SessionTransitionTests: XCTestCase {
         XCTAssertFalse(exit.state.isRoutePresent)
     }
 
+    // F14/S03/S05: camera generations are distinct from completed acquisition.
+    func testAcquisitionSurvivesSceneInterruptionAndViewportRestart() {
+        for kind in 0..<3 {
+            var state = runningState()
+            for time in stride(from: Int64(0), through: 2_000, by: 250) {
+                apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: time)), to: &state)
+            }
+            XCTAssertEqual(state.stage, .following)
+            var effects: [SessionEffect] = []
+            switch kind {
+            case 0:
+                apply(.sceneActivityChanged(isActive: false, atMS: 2_010), to: &state, recording: &effects)
+                XCTAssertNil(state.rawFace)
+                apply(.sceneActivityChanged(isActive: true, atMS: 2_020), to: &state, recording: &effects)
+            case 1:
+                apply(.cameraInterrupted(sessionID: 1), to: &state, recording: &effects)
+                XCTAssertNil(state.rawFace)
+                apply(.interruptionEnded(atMS: 2_020), to: &state, recording: &effects)
+            default:
+                apply(.viewportChanged(SessionViewport(widthPoints: 390, heightPoints: 800, transformRevision: 2), atMS: 2_020), to: &state, recording: &effects)
+            }
+            assertStopBeforeStart(effects, oldID: 1, newID: 2)
+            XCTAssertEqual(state.stage, .following)
+            XCTAssertNil(state.rawFace)
+            XCTAssertEqual(state.positioningHistory, .empty)
+            XCTAssertEqual(state.positioningHint, .trackingLost)
+            XCTAssertUnchanged(.observation(observation(sessionID: 1, revision: 1, timestampMS: 2_030)), state: state)
+            apply(.observation(observation(sessionID: 2, revision: state.geometryRevision, timestampMS: 2_040)), to: &state)
+            XCTAssertEqual(state.stage, .following)
+            XCTAssertNotNil(state.rawFace)
+            XCTAssertNil(state.positioningHistory.stableSinceMS)
+
+            apply(.observation(observation(sessionID: 2, revision: state.geometryRevision, timestampMS: 2_050, face: nil)), to: &state)
+            apply(.restartAfterLoss(atMS: 2_060), to: &state)
+            XCTAssertEqual(state.stage, .aligning)
+        }
+    }
+
+    func testIncompleteHoldResetsOnPauseAndExitRequiresNewAcquisition() {
+        var state = runningState()
+        for time in stride(from: Int64(0), through: 1_750, by: 250) {
+            apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: time)), to: &state)
+        }
+        apply(.sceneActivityChanged(isActive: false, atMS: 1_800), to: &state)
+        apply(.sceneActivityChanged(isActive: true, atMS: 1_900), to: &state)
+        apply(.observation(observation(sessionID: 2, revision: 1, timestampMS: 2_000)), to: &state)
+        XCTAssertEqual(state.stage, .aligning)
+        XCTAssertEqual(state.positioningHistory.stableSinceMS, 2_000)
+        for time in stride(from: Int64(2_250), through: 4_000, by: 250) {
+            apply(.observation(observation(sessionID: 2, revision: 1, timestampMS: time)), to: &state)
+        }
+        XCTAssertEqual(state.stage, .following)
+        for event in [SessionEvent.exit(atMS: 4_010), .routePresenceChanged(isPresent: false, atMS: 4_010)] {
+            let exited = SessionTransition.reduce(state: state, event: event).state
+            XCTAssertEqual(exited.stage, .aligning)
+            XCTAssertNil(exited.rawFace)
+            XCTAssertFalse(exited.desiredRunning)
+        }
+    }
+
+    func testMediaServicesResetRecoversWithFreshGenerationAndRejectsObsoleteResets() {
+        var state = runningState()
+        for time in stride(from: Int64(0), through: 2_000, by: 250) {
+            apply(.observation(observation(sessionID: 1, revision: 1, timestampMS: time)), to: &state)
+        }
+        XCTAssertEqual(state.stage, .following)
+        let reset = SessionTransition.reduce(state: state, event: .cameraMediaServicesReset(sessionID: 1, atMS: 2_100))
+        XCTAssertEqual(reset.effects, [.cancelWatchdog(sessionID: 1), .cancelFreshness(sessionID: 1),
+            .requestCameraStop(sessionID: 1), .requestCameraStart(sessionID: 2),
+            .scheduleWatchdog(sessionID: 2, startedAtMS: 2_100)])
+        XCTAssertEqual(reset.state.stage, .following)
+        XCTAssertNil(reset.state.rawFace)
+        XCTAssertNil(reset.state.failure)
+        XCTAssertEqual(reset.state.positioningHistory, .empty)
+        XCTAssertUnchanged(.cameraMediaServicesReset(sessionID: 1, atMS: 2_200), state: reset.state)
+        for event in [SessionEvent.exit(atMS: 2_200), .sceneActivityChanged(isActive: false, atMS: 2_200),
+                      .authorizationChanged(.denied, atMS: 2_200)] {
+            let stopped = SessionTransition.reduce(state: reset.state, event: event).state
+            XCTAssertUnchanged(.cameraMediaServicesReset(sessionID: 2, atMS: 2_300), state: stopped)
+        }
+        // An unfinished alignment hold must not survive recovery.
+        var aligning = populatedRunningState(timestampMS: 100)
+        apply(.cameraMediaServicesReset(sessionID: 1, atMS: 200), to: &aligning)
+        XCTAssertEqual(aligning.stage, .aligning)
+        XCTAssertNil(aligning.positioningHistory.stableSinceMS)
+    }
+
     private func runningState(startedAtMS: Int64 = 0) -> SessionState {
         var state = SessionState()
         apply(.authorizationChanged(.authorized, atMS: startedAtMS), to: &state)

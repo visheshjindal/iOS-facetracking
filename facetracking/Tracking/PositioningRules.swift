@@ -63,8 +63,6 @@ enum PositioningRules {
         history.poseIsValid = updatedPoseLatch(
             previous: previousLatch,
             pose: history.filteredFace?.pose,
-            rawPose: face?.pose,
-            continuous: continuous,
             configuration: configuration
         )
         history.previousObservationMS = timestampMS
@@ -89,15 +87,17 @@ enum PositioningRules {
             return result(history: history, stage: .aligning, hint: correction, rawFace: face)
         }
 
-        if !continuous || history.holdAnchor == nil || history.stableSinceMS == nil {
+        let stableSinceMS: Int64
+        if continuous, let anchor = history.holdAnchor, let since = history.stableSinceMS,
+           !movedBeyondAnchor(filteredFace, anchor: anchor, configuration: configuration) {
+            stableSinceMS = since
+        } else {
             history.holdAnchor = filteredFace
-            history.stableSinceMS = timestampMS
-        } else if movedBeyondAnchor(filteredFace, anchor: history.holdAnchor!, configuration: configuration) {
-            history.holdAnchor = filteredFace
-            history.stableSinceMS = timestampMS
+            stableSinceMS = timestampMS
         }
+        history.stableSinceMS = stableSinceMS
 
-        let acquired = timestampMS - history.stableSinceMS! >= configuration.timing.acquisitionHoldMS
+        let acquired = timestampMS - stableSinceMS >= configuration.timing.acquisitionHoldMS
         if acquired {
             history.holdAnchor = nil
             history.stableSinceMS = nil
@@ -147,16 +147,11 @@ enum PositioningRules {
     private static func updatedPoseLatch(
         previous: Bool,
         pose: FacePose?,
-        rawPose: FacePose?,
-        continuous: Bool,
         configuration: TrackingConfiguration
     ) -> Bool {
         guard let pose else { return false }
         let limits = configuration.positioning
-        if !continuous, previous {
-            guard let rawPose else { return false }
-            return within(rawPose, yaw: limits.poseExitYawDegrees, pitch: limits.poseExitPitchDegrees, roll: limits.poseExitRollDegrees)
-        }
+        // Discontinuous observations already reset the filter to the raw pose.
         return previous
             ? within(pose, yaw: limits.poseExitYawDegrees, pitch: limits.poseExitPitchDegrees, roll: limits.poseExitRollDegrees)
             : within(pose, yaw: limits.poseEntryYawDegrees, pitch: limits.poseEntryPitchDegrees, roll: limits.poseEntryRollDegrees)
@@ -176,14 +171,15 @@ enum PositioningRules {
         let position = configuration.positioning
         let dx = face.geometry.centerX - target.centerX
         let dy = face.geometry.centerY - target.centerY
-        let horizontalTolerance = position.centerToleranceTargetFraction * target.width
-        let verticalTolerance = position.centerToleranceTargetFraction * target.height
+        let centerTolerance = stage == .following
+            ? position.followingCenterToleranceTargetFraction
+            : position.centerToleranceTargetFraction
+        let horizontalTolerance = centerTolerance * target.width
+        let verticalTolerance = centerTolerance * target.height
         if outsideInclusive(face.geometry.centerX, center: target.centerX, delta: horizontalTolerance) {
-            if stage == .aligning { return .centerFace }
             return dx < 0 ? .moveRight : .moveLeft
         }
         if outsideInclusive(face.geometry.centerY, center: target.centerY, delta: verticalTolerance) {
-            if stage == .aligning { return .centerFace }
             return dy < 0 ? .moveDown : .moveUp
         }
         if face.geometry.width > position.maximumFaceScaleTargetFraction * target.width

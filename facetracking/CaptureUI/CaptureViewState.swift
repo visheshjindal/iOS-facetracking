@@ -8,6 +8,11 @@ struct CaptureViewState: Equatable {
     let selection: CameraSelection?
     let rawFace: FaceSample?
     let guidance: CaptureGuidanceProjection
+    let target: FaceGeometry?
+
+    var isTrackingLost: Bool {
+        if case .positioning(.trackingLost) = guidance.primary { true } else { false }
+    }
 
     var showsPreview: Bool {
         authorization == .authorized && failure == nil
@@ -21,5 +26,6 @@ struct CaptureViewState: Equatable {
         self.selection = selection
         rawFace = session.rawFace
         guidance = GuidanceRules.project(session: session)
+        target = session.target
     }
 }

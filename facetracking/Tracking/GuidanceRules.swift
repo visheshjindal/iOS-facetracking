@@ -35,8 +35,14 @@ struct CaptureGuidanceProjection: Sendable, Equatable {
 
 enum GuidanceRules {
     static func project(session: SessionState, configuration: TrackingConfiguration = .provisional) -> CaptureGuidanceProjection {
-        let assessment = session.lightingHistory.activeAssessment
-        let side = session.lightingHistory.activeSide
+        let lighting = session.lightingHistory
+        // Persistence may retain an old warning indefinitely while new candidate
+        // states alternate. Do not keep instructing an unsupported direction.
+        // Keep the reducer's hysteresis history; presentation checks current evidence.
+        let warningIsBeingReassessed = lighting.activeAssessment.isWarning
+            && lighting.candidateAssessment != nil
+        let assessment: LightingAssessment = warningIsBeingReassessed ? .unknown : lighting.activeAssessment
+        let side = warningIsBeingReassessed ? nil : lighting.activeSide
         let positioningAllowsLighting = session.positioningHint == .holdStill || session.positioningHint == .following
         let primary: PrimaryGuidance
         if positioningAllowsLighting, assessment.isWarning {

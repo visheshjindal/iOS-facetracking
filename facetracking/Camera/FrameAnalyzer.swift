@@ -117,17 +117,16 @@ final class FrameAnalyzer: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         let height = Double(CVPixelBufferGetHeight(pixelBuffer))
         let apertureWidth = cleanAperture?.width ?? width
         let apertureHeight = cleanAperture?.height ?? height
-        let physicallyOriented = snapshotContext.outputRotationDegrees == 90
-        let rotation: FrameQuarterTurn = physicallyOriented ? .degrees0 : .degrees90Clockwise
-        let oriented = physicallyOriented
-            ? CoordinateSize(width: apertureWidth, height: apertureHeight)
-            : CoordinateSize(width: apertureHeight, height: apertureWidth)
+        // CameraSessionService guarantees physically portrait-oriented output.
+        // The applied sensor angle may be 0/90/180/270; it is not a request
+        // for Vision to rotate the already-delivered pixels again.
+        let oriented = CoordinateSize(width: apertureWidth, height: apertureHeight)
         let transform = FrameTransformSnapshot(
             geometryRevision: snapshotContext.geometryRevision,
             rawBufferPixels: CoordinateSize(width: width, height: height),
             orientedImagePixels: oriented,
-            rawToOrientedRotation: rotation,
-            visionOrientationPolicy: physicallyOriented ? .bufferAlreadyOriented : .visionAppliesSnapshotRotation,
+            rawToOrientedRotation: .degrees0,
+            visionOrientationPolicy: .bufferAlreadyOriented,
             cleanAperturePolicy: cleanAperture.map(FrameCleanAperturePolicy.crop) ?? .fullBuffer,
             viewportPoints: snapshotContext.viewportPoints,
             interfaceOrientation: .portrait,
@@ -137,7 +136,7 @@ final class FrameAnalyzer: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         do {
             let candidates = try detector.detect(
                 in: pixelBuffer,
-                orientation: physicallyOriented ? .up : .right
+                orientation: .up
             )
             let detectedFace = firstUsableFace(candidates, transform: transform)
             let measurement = lumaSampler.measure(

@@ -11,6 +11,7 @@ enum SessionEvent: Sendable, Equatable {
     case cameraStarted(sessionID: UInt64)
     case cameraStopped(sessionID: UInt64)
     case cameraFailed(sessionID: UInt64, failure: SessionFailure)
+    case cameraMediaServicesReset(sessionID: UInt64, atMS: Int64)
     case cameraInterrupted(sessionID: UInt64)
     case interruptionEnded(atMS: Int64)
     case exit(atMS: Int64)
@@ -54,6 +55,7 @@ enum SessionTransition {
         case let .routePresenceChanged(isPresent, nowMS):
             guard isPresent != state.isRoutePresent else { break }
             state.isRoutePresent = isPresent
+            if !isPresent { clearAttemptData(state: &state, preservingStage: false) }
             reconcileEligibility(state: &state, nowMS: nowMS, effects: &effects)
 
         case let .viewportChanged(viewport, nowMS):
@@ -69,6 +71,7 @@ enum SessionTransition {
 
         case let .restartAfterLoss(nowMS):
             guard state.isTrackingLost else { break }
+            clearAttemptData(state: &state, preservingStage: false)
             restartIfEligible(state: &state, nowMS: nowMS, effects: &effects)
 
         case let .observation(observation):
@@ -147,6 +150,10 @@ enum SessionTransition {
             guard state.desiredRunning, state.activeSessionID == sessionID else { break }
             failCurrentAttempt(state: &state, sessionID: sessionID, failure: failure, effects: &effects)
 
+        case let .cameraMediaServicesReset(sessionID, nowMS):
+            guard state.desiredRunning, state.activeSessionID == sessionID else { break }
+            restartIfEligible(state: &state, nowMS: nowMS, effects: &effects)
+
         case let .cameraInterrupted(sessionID):
             guard state.desiredRunning, state.activeSessionID == sessionID else { break }
             invalidateCurrentAttempt(state: &state, effects: &effects)
@@ -165,6 +172,7 @@ enum SessionTransition {
             } else {
                 clearAttemptData(state: &state)
             }
+            clearAttemptData(state: &state, preservingStage: false)
             state.isRoutePresent = false
             effects.append(.dismissCapture)
         }
@@ -218,7 +226,6 @@ enum SessionTransition {
         state.activeSessionID = sessionID
         state.desiredRunning = true
         state.cameraStatus = .starting(sessionID: sessionID)
-        state.stage = .aligning
         clearAttemptData(state: &state, preservingStage: true)
         state.attemptStartedAtMS = nowMS
         effects.append(.requestCameraStart(sessionID: sessionID))
@@ -274,7 +281,7 @@ enum SessionTransition {
 
     private static func clearAttemptData(
         state: inout SessionState,
-        preservingStage: Bool = false
+        preservingStage: Bool = true
     ) {
         if !preservingStage { state.stage = .aligning }
         state.positioningHint = preservingStage && state.stage == .following ? .trackingLost : .placeFace
