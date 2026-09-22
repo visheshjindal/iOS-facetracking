@@ -139,7 +139,7 @@ sequenceDiagram
         else analyzer available
             OQ->>OQ: Vision + transform + luma
             OQ->>MB: publish(FrameObservation)
-            Note over MB: capacity 1; newest pending value wins
+            Note over MB: Capacity one, newest pending value wins
             MB-->>UI: deliver owned scalar observation
             UI->>UI: validate generation and reduce synchronously
         end
