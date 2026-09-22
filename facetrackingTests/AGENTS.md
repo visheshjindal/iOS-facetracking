@@ -20,6 +20,7 @@
 - Exercise candidate changes as `(assessment, side)` keys. Separate exposure entry/exit, imbalance entry/strict-exit, high-contrast recovery, invalid/nil-pose reset, out-of-order rejection, and fresh-observation-only compact timing.
 - U01–U04 projection fixtures assert stable localization/action identifiers, mask/guide/outline state, badge style/label, and raw-versus-filtered geometry without introspecting SwiftUI layout. Build acquisition fixtures with injected timestamps through 1,999/2,000 ms.
 - `CaptureFixture.allCases` must construct state without authorization or camera services. Keep the DEBUG launch harness isolated from release composition and cover that invariant by source/bundle audit.
+- Announcement tests inject both monotonic clock and scheduler. Advance exact millisecond boundaries manually; assert duplicate suppression and latest-prompt coalescing at the documented 1,200 ms cadence without sleeps or system accessibility notifications.
 - Build lifecycle fixtures through reducer events; direct state mutation is reserved for otherwise unreachable overflow boundaries and seeding history that a test explicitly names.
 - Focused command: `xcodebuild -project facetracking.xcodeproj -scheme facetracking -destination 'platform=iOS Simulator,id=<DISCOVERED_UDID>' -only-testing:facetrackingTests test` with temporary DerivedData and result-bundle paths.
 - `AGENTS.md` is excluded from synchronized-group target membership and test bundles.

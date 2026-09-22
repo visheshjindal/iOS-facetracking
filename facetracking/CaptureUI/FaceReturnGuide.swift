@@ -17,6 +17,7 @@ struct FaceReturnGuide: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text("guide.return"))
+            .accessibilityIdentifier("capture.returnGuide")
         }
         .allowsHitTesting(false)
     }

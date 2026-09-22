@@ -7,6 +7,7 @@ struct CaptureScreen: View {
     let onRetry: () -> Void
     let onRestart: () -> Void
     let onExit: () -> Void
+    let announcements: PromptAnnouncementCoordinator?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -18,6 +19,8 @@ struct CaptureScreen: View {
                 exitButton
             }
         }
+        .onAppear { announcePrompt() }
+        .onChange(of: viewState.accessibilityPromptKey) { _, _ in announcePrompt() }
     }
 
     @ViewBuilder
@@ -104,8 +107,12 @@ struct CaptureScreen: View {
 
     private func permissionMessage(bodyKey: String) -> some View {
         VStack(spacing: 12) {
-            Text("permission.title").font(.title2.bold())
-            Text(LocalizedStringKey(bodyKey)).multilineTextAlignment(.center)
+            Text("permission.title")
+                .font(.title2.bold())
+                .accessibilityIdentifier("capture.permissionTitle")
+            Text(LocalizedStringKey(bodyKey))
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("capture.permissionMessage")
         }
     }
 
@@ -113,6 +120,7 @@ struct CaptureScreen: View {
         Text(LocalizedStringKey(key))
             .font(.headline)
             .multilineTextAlignment(.center)
+            .accessibilityIdentifier("capture.statusMessage")
     }
 
     private func centeredPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -133,5 +141,13 @@ struct CaptureScreen: View {
         }
         .buttonStyle(.borderedProminent)
         .accessibilityIdentifier(identifier)
+    }
+
+    private func announcePrompt() {
+        let key = viewState.accessibilityPromptKey
+        announcements?.promptChanged(
+            key: key,
+            message: String(localized: String.LocalizationValue(key))
+        )
     }
 }

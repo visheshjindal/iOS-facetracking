@@ -120,6 +120,31 @@ final class CameraPreviewLifecycleTests: XCTestCase {
         XCTAssertEqual(camera.tearDownCount, 1)
     }
 
+    func testU06RepeatedFailureRetryExitStopsOneOwnerAndReleasesStore() async {
+        let camera = CameraDouble()
+        weak var weakStore: CaptureStore?
+        do {
+            let store = makeStore(authorization: AuthorizationDouble(.authorized), camera: camera)
+            weakStore = store
+            store.routeAppeared(isSceneActive: true)
+            store.viewportChanged(width: 390, height: 700)
+
+            for sessionID in UInt64(1)...10 {
+                camera.emit(.failed(sessionID: sessionID, failure: .cameraUnavailable))
+                await Task.yield()
+                store.retry()
+            }
+            store.exit()
+            store.routeDisappeared()
+        }
+
+        XCTAssertNil(weakStore)
+        XCTAssertLessThanOrEqual(camera.maximumActiveCount, 1)
+        XCTAssertEqual(camera.commands.filter(\.isStart).count, 11)
+        XCTAssertEqual(camera.commands.filter(\.isStop).count, 11)
+        XCTAssertEqual(camera.tearDownCount, 1)
+    }
+
     func testMailboxConsumptionAt300KeepsFaceAnd301WithdrawsPayload() {
         for (capturedAt, expectsFace) in [(700, true), (699, false)] {
             let camera = CameraDouble()

@@ -50,6 +50,21 @@ enum GuidanceTextKey {
     }
 }
 
+extension CaptureViewState {
+    var accessibilityPromptKey: String {
+        switch authorization {
+        case .notDetermined, .denied:
+            return "permission.title"
+        case .restricted:
+            return "permission.restricted"
+        case .authorized:
+            if isInterrupted { return "camera.interrupted" }
+            if let failure { return GuidanceTextKey.failureKey(failure) }
+            return GuidanceTextKey.key(for: guidance.primary)
+        }
+    }
+}
+
 enum LightingBadgeStyle: Equatable {
     case unknown
     case acceptable

@@ -36,3 +36,8 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output/
+
+# Local implementation planning and handoff records
+docs/
+plans/
+ios-swift-implementation-plan.mdx

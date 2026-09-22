@@ -4,9 +4,14 @@ import SwiftUI
 struct CaptureRoute: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var store: CaptureStore
+    @State private var announcements: PromptAnnouncementCoordinator
 
     init(dependencies: CaptureDependencies, onDismiss: @escaping () -> Void) {
         _store = State(initialValue: CaptureStore(dependencies: dependencies, dismiss: onDismiss))
+        _announcements = State(initialValue: PromptAnnouncementCoordinator(
+            clock: dependencies.clock,
+            scheduler: dependencies.scheduler
+        ))
     }
 
     var body: some View {
@@ -26,7 +31,8 @@ struct CaptureRoute: View {
                 onSettings: store.openSettings,
                 onRetry: store.retry,
                 onRestart: store.restartAfterLoss,
-                onExit: store.exit
+                onExit: store.exit,
+                announcements: announcements
             )
         }
         .onAppear { store.routeAppeared(isSceneActive: scenePhase == .active) }
